@@ -1,8 +1,11 @@
 [package]
 name = "looke"
+description = "To determine if two images look the same to human color perception"
 version = "0.1.0"
 authors = ["hikerpig <hikerpigwinnie@gmail.com>"]
+repository = "https://github.com/hikerpig/looke"
 edition = "2018"
+license = "MIT"
 
 [dependencies]
 image = "0.20"
