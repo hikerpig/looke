@@ -59,18 +59,14 @@ pub fn ciede2000_diff(c1: &Lab, c2: &Lab) -> f32 {
     let h1p = hp_f(b1, a1p); //(7)
     let h2p = hp_f(b2, a2p); //(7)
 
-    /**
-     * Step 2: Calculate dLp, dCp, dHp
-     */
+    // Step 2: Calculate dLp, dCp, dHp
     let dlp = l2 - l1; //(8)
     let dcp = c2p - c1p; //(9)
 
     let dhp = dhp_f(c1, c2, h1p, h2p); //(10)
     let dhp = 2.0 * sqrtf(c1p * c2p) * (radians(dhp) / 2.0).sin(); //(11)
 
-    /**
-     * Step 3: Calculate CIEDE2000 Color-Difference
-     */
+    // Step 3: Calculate CIEDE2000 Color-Difference
     let a_l = (l1 + l2) / 2.0; //(12)
     let a_cp = (c1p + c2p) / 2.0; //(13)
 
