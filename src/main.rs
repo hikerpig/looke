@@ -1,7 +1,7 @@
 extern crate image;
 extern crate palette;
 
-use image::{GenericImage, Pixel};
+use image::{GenericImage, ImageBuffer, Pixel, Rgb};
 use palette::Srgb;
 use std::env;
 use std::path::Path;
@@ -23,21 +23,36 @@ fn main() {
 
     let result = compare_imgs(&img1, &img2, 2.0);
 
-    std::process::exit(match result.equal {
-        true => 0,
+    let comparator: PixelComparator = |p1, p2| {
+        ciede2000_comparator(p1, p2, 2.0)
+    };
+
+    match result.equal {
+        true => {
+            std::process::exit(0);
+        },
         false => {
             println!(
                 "Images {} and {} differs!",
                 path1.display(),
                 path2.display()
             );
-            println!(
-                "Diff area {:?}",
-                result.diff_area
-            );
-            -1
+            println!("Diff area {:?}", result.diff_area);
+            let img_buffer = build_diff_image(&img1, &img2, comparator);
+            let p = Path::new("diff.jpg");
+            img_buffer.save(p).unwrap();
+
+            std::process::exit(1);
         }
-    });
+    };
+}
+
+#[derive(Debug)]
+struct DiffArea {
+    xmin: u32,
+    ymin: u32,
+    xmax: u32,
+    ymax: u32,
 }
 
 struct DiffResult {
@@ -56,10 +71,9 @@ where
 
     for (x, y, p1) in px_iter_1 {
         let p2 = img2.get_pixel(x, y);
-        let p_result = ciede2000_comparator(&p1, &p2, tolerance);
+        let p_result = ciede2000_comparator(p1.channels4(), p2.channels4(), tolerance);
         if !p_result {
             diff_pixels.push((x, y));
-            //            return false;
         }
     }
 
@@ -67,18 +81,40 @@ where
 
     let diff_area = get_diff_area(diff_pixels);
 
-    return DiffResult {
-        equal,
-        diff_area,
-    };
+    return DiffResult { equal, diff_area };
 }
 
-#[derive(Debug)]
-struct DiffArea {
-    xmin: u32,
-    ymin: u32,
-    xmax: u32,
-    ymax: u32,
+type RgbaTuple = (u8, u8, u8, u8);
+
+type PixelComparator = fn(p1: RgbaTuple, p2: RgbaTuple) -> bool;
+
+fn build_diff_image<I, P>(img1: &I, img2: &I, comparator: PixelComparator) -> image::RgbImage
+where
+    I: GenericImage<Pixel = P>,
+    P: Pixel<Subpixel = u8> + 'static,
+{
+    let (w1, h1) = img1.dimensions();
+    let (w2, h2) = img2.dimensions();
+    let width = w1.max(w2);
+    let height = h1.max(h2);
+    let min_width = w1.min(w2);
+    let min_height = h1.min(h2);
+    let mut img_buffer: image::RgbImage = ImageBuffer::new(width, height);
+    let highlight_color: Rgb<u8> = Rgb { data: [200, 1, 1] };
+
+    let px_iter_1 = img1.pixels();
+
+    for (x, y, p1) in px_iter_1 {
+        let p2 = img2.get_pixel(x, y);
+        if x >= min_width || y >= min_height {
+            img_buffer.put_pixel(x, y, highlight_color);
+            continue;
+        }
+        let p_result = comparator(p1.channels4(), p2.channels4());
+        img_buffer.put_pixel(x, y, if p_result { p1.to_rgb() } else { highlight_color });
+    }
+
+    img_buffer
 }
 
 fn get_diff_area(pixels: Vec<(u32, u32)>) -> DiffArea {
@@ -110,21 +146,17 @@ fn get_diff_area(pixels: Vec<(u32, u32)>) -> DiffArea {
     }
 }
 
-fn are_colors_same<P>(p1: &P, p2: &P) -> bool
-where
-    P: Pixel<Subpixel = u8>,
+fn are_colors_same(p1: RgbaTuple, p2: RgbaTuple) -> bool
 {
-    let (k1, k2, k3, _) = p1.channels4();
-    let (l1, l2, l3, _) = p2.channels4();
+    let (k1, k2, k3, _) = p1;
+    let (l1, l2, l3, _) = p2;
     return (k1 == l1) && (k2 == l2) && (k3 == l3);
 }
 
-fn ciede2000_comparator<P>(p1: &P, p2: &P, t: f32) -> bool
-where
-    P: Pixel<Subpixel = u8>,
+fn ciede2000_comparator(p1: RgbaTuple, p2: RgbaTuple, t: f32) -> bool
 {
-    let (k1, k2, k3, _) = p1.channels4();
-    let (l1, l2, l3, _) = p2.channels4();
+    let (k1, k2, k3, _) = p1;
+    let (l1, l2, l3, _) = p2;
     if are_colors_same(p1, p2) {
         return true;
     }
