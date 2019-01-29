@@ -13,3 +13,4 @@ keywords = ["image", "diff"]
 [dependencies]
 image = "0.20"
 palette = "0.4.1"
+clap = "2.32.0"

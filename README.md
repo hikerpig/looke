@@ -13,7 +13,20 @@ cargo install looke
 # Usage
 
 ```
-looke path/to/img1 path/to/img2
+USAGE:
+    looke [FLAGS] [OPTIONS] <ref-image> <image>
+
+FLAGS:
+    -h, --help         Prints help information
+    -t, --tolerance    tolerance for image diff
+    -V, --version      Prints version information
+
+OPTIONS:
+    -d, --diff-image <diff-image>    path for saving diff output image
+
+ARGS:
+    <ref-image>    path to reference image
+    <image>        path to image
 ```
 
 If they look not the same, exit with 1.

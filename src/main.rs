@@ -1,36 +1,70 @@
 extern crate image;
 extern crate palette;
 
+#[macro_use]
+extern crate clap;
+
+use clap::{App, Arg};
 use image::{GenericImage, ImageBuffer, Pixel, Rgb};
 use palette::Srgb;
-use std::env;
 use std::path::Path;
 mod color;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let app = App::new(crate_name!())
+        .version(crate_version!())
+        .about(crate_description!())
+        .arg(
+            Arg::with_name("ref-image")
+                .help("path to reference image")
+                .index(1)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("image")
+                .help("path to image")
+                .index(2)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("tolerance")
+                .help("tolerance for image diff")
+                .short("t")
+                .long("tolerance"),
+        )
+        .arg(
+            Arg::with_name("diff-image")
+                .short("d")
+                .long("diff-image")
+                .takes_value(true)
+                .help("path for saving diff output image"),
+        );
 
-    if args.len() != 3 {
-        println!("Usage: looke img1 img2");
-        return;
-    }
+    let matches = app.get_matches();
+    let ref_image = matches.value_of("ref-image").unwrap();
+    let image = matches.value_of("image").unwrap();
+    let diff_image_v = matches.value_of("diff-image");
+    let tolerance: f32 = matches
+        .value_of("tolerance")
+        .unwrap_or("0")
+        .parse()
+        .unwrap_or(0.0);
 
-    let path1 = Path::new(&args[1]);
-    let path2 = Path::new(&args[2]);
+    let path1 = Path::new(&ref_image);
+    let path2 = Path::new(&image);
 
     let img1 = image::open(&path1).unwrap();
     let img2 = image::open(&path2).unwrap();
 
-    let result = compare_imgs(&img1, &img2, 2.0);
+    let result = compare_imgs(&img1, &img2, tolerance);
 
-    let comparator: PixelComparator = |p1, p2| {
-        ciede2000_comparator(p1, p2, 2.0)
-    };
+    let comparator: PixelComparator =
+        Box::new(move |p1, p2| ciede2000_comparator(p1, p2, tolerance));
 
     match result.equal {
         true => {
             std::process::exit(0);
-        },
+        }
         false => {
             println!(
                 "Images {} and {} differs!",
@@ -39,8 +73,15 @@ fn main() {
             );
             println!("Diff area {:?}", result.diff_area);
             let img_buffer = build_diff_image(&img1, &img2, comparator);
-            let p = Path::new("diff.jpg");
-            img_buffer.save(p).unwrap();
+
+            match diff_image_v {
+                Some(v) => {
+                    let p = Path::new(v);
+                    img_buffer.save(p).unwrap();
+                    println!("diff image saved to {}", v)
+                }
+                None => {}
+            }
 
             std::process::exit(1);
         }
@@ -86,7 +127,7 @@ where
 
 type RgbaTuple = (u8, u8, u8, u8);
 
-type PixelComparator = fn(p1: RgbaTuple, p2: RgbaTuple) -> bool;
+type PixelComparator = Box<Fn(RgbaTuple, RgbaTuple) -> bool>;
 
 fn build_diff_image<I, P>(img1: &I, img2: &I, comparator: PixelComparator) -> image::RgbImage
 where
@@ -111,7 +152,15 @@ where
             continue;
         }
         let p_result = comparator(p1.channels4(), p2.channels4());
-        img_buffer.put_pixel(x, y, if p_result { p1.to_rgb() } else { highlight_color });
+        img_buffer.put_pixel(
+            x,
+            y,
+            if p_result {
+                p1.to_rgb()
+            } else {
+                highlight_color
+            },
+        );
     }
 
     img_buffer
@@ -146,15 +195,13 @@ fn get_diff_area(pixels: Vec<(u32, u32)>) -> DiffArea {
     }
 }
 
-fn are_colors_same(p1: RgbaTuple, p2: RgbaTuple) -> bool
-{
+fn are_colors_same(p1: RgbaTuple, p2: RgbaTuple) -> bool {
     let (k1, k2, k3, _) = p1;
     let (l1, l2, l3, _) = p2;
     return (k1 == l1) && (k2 == l2) && (k3 == l3);
 }
 
-fn ciede2000_comparator(p1: RgbaTuple, p2: RgbaTuple, t: f32) -> bool
-{
+fn ciede2000_comparator(p1: RgbaTuple, p2: RgbaTuple, t: f32) -> bool {
     let (k1, k2, k3, _) = p1;
     let (l1, l2, l3, _) = p2;
     if are_colors_same(p1, p2) {
