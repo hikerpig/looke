@@ -32,7 +32,8 @@ fn main() {
             Arg::with_name("tolerance")
                 .help("tolerance for image diff")
                 .short("t")
-                .long("tolerance"),
+                .long("tolerance")
+                .takes_value(true),
         )
         .arg(
             Arg::with_name("diff-image")
